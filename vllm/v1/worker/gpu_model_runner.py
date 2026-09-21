@@ -239,6 +239,7 @@ from .utils import (
     add_kv_sharing_layers_to_kv_cache_groups,
     allocate_kv_cache,
     bind_kv_cache,
+    clone_mm_encoder_outputs,
     copy_kv_cache_blocks_inplace,
     prepare_kernel_block_sizes,
     sanity_check_mm_encoder_outputs,
@@ -3186,9 +3187,13 @@ class GPUModelRunner(
                         )
 
                     if cudagraph_output is not None:
+                        # The cudagraph manager already clones per-item
+                        # outputs.
                         batch_outputs = cudagraph_output
                     else:
-                        batch_outputs = model.embed_multimodal(**mm_kwargs_batch)
+                        batch_outputs = clone_mm_encoder_outputs(
+                            model.embed_multimodal(**mm_kwargs_batch)
+                        )
 
             sanity_check_mm_encoder_outputs(batch_outputs, expected_num_items=num_items)
             encoder_outputs.extend(batch_outputs)

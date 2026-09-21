@@ -80,8 +80,35 @@ def test_encoder_graph_unsupported_modality_uses_eager_output():
     ):
         result = runner.execute_mm_encoder([])
     assert len(result) == 1
-    assert result[0] is output
+    # Eager outputs are cloned per item so the cache owns its storage.
+    assert torch.equal(result[0], output)
+    assert result[0] is not output
     manager.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("as_3d", [False, True])
+def test_eager_outputs_own_storage_per_item(as_3d):
+    """Eager encoder outputs must be per-item tensors that own their storage.
+
+    ``embed_multimodal`` commonly returns views of one batched tensor (a
+    ``torch.split`` list, or a single 3D tensor). Caching such views pins the
+    whole batch's memory until every sibling view is evicted.
+    """
+    runner = _make_runner([], [])
+    batched = torch.arange(4 * HIDDEN, dtype=torch.float32).reshape(4, HIDDEN)
+    model_output = (
+        batched.reshape(4, 1, HIDDEN) if as_3d else list(batched.split([1, 1, 1, 1]))
+    )
+    runner.model = MagicMock()
+    runner.model.embed_multimodal.return_value = model_output
+    with patch(
+        "vllm.v1.worker.gpu.mm.encoder_runner.group_and_batch_mm_kwargs",
+        return_value=[("image", 4, {})],
+    ):
+        result = runner.execute_mm_encoder([])
+    assert len(result) == 4
+    assert all(t._base is None for t in result)
+    assert all(torch.equal(r.flatten(), v) for r, v in zip(result, batched))
 
 
 def _model_state(cache: EncoderCache) -> MagicMock:

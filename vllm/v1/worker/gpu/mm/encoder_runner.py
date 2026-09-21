@@ -22,6 +22,7 @@ from vllm.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
 from vllm.v1.worker.gpu.mm.encoder_cache import EncoderCache
 from vllm.v1.worker.utils import (
     EncoderTimingStats,
+    clone_mm_encoder_outputs,
     sanity_check_mm_encoder_outputs,
 )
 
@@ -162,11 +163,13 @@ class EncoderRunner:
                 and cg_manager.supports_modality(modality)
                 else None
             )
-            batch_outputs = (
-                cudagraph_output
-                if cudagraph_output is not None
-                else self.model.embed_multimodal(**mm_kwargs_batch)
-            )
+            if cudagraph_output is not None:
+                # The cudagraph manager already clones per-item outputs.
+                batch_outputs = cudagraph_output
+            else:
+                batch_outputs = clone_mm_encoder_outputs(
+                    self.model.embed_multimodal(**mm_kwargs_batch)
+                )
             sanity_check_mm_encoder_outputs(batch_outputs, expected_num_items=num_items)
             encoder_outputs.extend(batch_outputs)
         return encoder_outputs

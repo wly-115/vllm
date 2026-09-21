@@ -675,6 +675,7 @@ class EncoderCudaGraphManager:
                     rank_items,
                     per_item_out_tokens,
                     result,
+                    clone=True,
                 )
                 current_idx += count
 

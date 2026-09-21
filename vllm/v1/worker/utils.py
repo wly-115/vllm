@@ -501,6 +501,19 @@ def prepare_kernel_block_sizes(
     return kernel_block_sizes
 
 
+def clone_mm_encoder_outputs(
+    mm_embeddings: MultiModalEmbeddings,
+) -> list[torch.Tensor]:
+    """Clone per-item multimodal embeddings so each item owns its storage.
+
+    ``embed_multimodal`` commonly returns views into one batched tensor
+    (e.g. ``torch.split`` of a concatenated batch, or a single 3D tensor).
+    Cached views would pin the whole batch's GPU memory until every sibling
+    view is evicted, so the worker clones each item before caching.
+    """
+    return [embeddings.clone() for embeddings in mm_embeddings]
+
+
 def sanity_check_mm_encoder_outputs(
     mm_embeddings: MultiModalEmbeddings,
     expected_num_items: int,
